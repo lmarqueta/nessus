@@ -1,0 +1,10 @@
+# Nessus host configuration
+nessus:
+  hostname: # nessus hostname
+  port:     # nessus port
+  access:   # nessus user accessKey
+  secret:   # nessus user secretKey
+  verify:   # Verify SSL certificate
+            # set to CA_BUNDLE file or directory
+            # Set to False to skip validation (not recommended)
+  disable_warnings: # ignore SSL warnings (not recommended)
