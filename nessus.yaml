@@ -1,5 +1,5 @@
 # Nessus host configuration
-nessus:
+host:
   hostname: # nessus hostname
   port:     # nessus port
   access:   # nessus user accessKey

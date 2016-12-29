@@ -108,7 +108,7 @@ if __name__ == "__main__":
         c = configure(args.config_file)
     else:
         c = configure()
-    host   = c['host']['address']
+    host   = c['host']['hostname']
     port   = c['host']['port']
     access = c['host']['access']
     secret = c['host']['secret']
