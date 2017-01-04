@@ -7,7 +7,8 @@ import os
 import sys
 import yaml
 import json
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
+import logging
+import sqlite3
 
 
 def configure(file="nessus.yaml"):
@@ -31,6 +32,7 @@ def call_api(method, path, data=None):
         'Content-type': 'application/json',
         'X-ApiKeys': 'accessKey='+access+'; secretKey='+secret
     }
+
     if method == "get":
         r = requests.get(url, headers=headers, verify=verify)
     elif method == "put":
@@ -47,8 +49,6 @@ def call_api(method, path, data=None):
 
 
 def update_scan(scan_name, filename):
-    print 'Updating scan <{}> with file <{}>'.format(scan_name, filename)
-
     # Find scan. Note that scan names should be unique :(
     # This code will return the first scan found with the given name
     scan_id = None
@@ -74,21 +74,196 @@ def update_scan(scan_name, filename):
     data = {'settings': {'enabled': True, 'text_targets': text_targets}}
     path = "scans/{}".format(scan_id)
     r = call_api("put", path, data)
-    print "Scan updated"
+    print("Scan updated")
+
+
+def list_all_folders():
+    r = call_api("get", "folders")
+    if not args.quiet:
+        print(" fid Folder name")
+        print("==== =============================================")
+    for t in r['folders']:
+        if not quiet:
+            print("{:>4} {}".format(t['id'], t['name']))
+
+
+def list_all_scans():
+    r = call_api("get", "scans")
+    if not args.quiet:
+        print(" fid  sid Scan name")
+        print("==== ==== =============================================")
+    for t in r['scans']:
+        if not quiet:
+            print("{:>4} {:>4} {}".format(t['folder_id'], t['id'], t['name']))
+
+
+def list_folder(folder_id):
+    r = call_api("get", "scans")
+    for s in r['scans']:
+        if s['folder_id'] == int(folder_id):
+            if not quiet:
+                # if quiet, this function is useless :)
+                print("{:>4} {}".format(s['id'], s['name']))
+
+
+def list_scan(scan_id):
+    r = call_api("get", "scans/{}".format(scan_id))
+
+    if not quiet:
+        name = r['info']['name']
+        if 'hostcount' in r['info']:
+            c = r['info']['hostcount']
+        else:
+            c = 0
+        print ("Scan:{}:{}:{}".format(scan_id,name, c))
+        print(" Id  C  H  M  L Hostname                        ")
+        print("=== == == == == ================================")
+
+    if 'hosts' not in r:
+        return
+
+    for d in r['hosts']:
+        hid = d['host_id']
+        name = d['hostname']
+        c = d['critical']
+        h = d['high']
+        m = d['medium']
+        l = d['low']
+        if not quiet:
+            print("{:>3} {:>2} {:>2} {:>2} {:>2} {}".format(hid,
+                c, h, m, l, name))
+
+        if updatedb:
+            insert_host(hid, name, scan_id)
+
+
+def severity_name(n):
+    if n == 0:
+        return 'INFO'
+    elif n == 1:
+        return 'LOW'
+    elif n == 2:
+        return 'MEDIUM'
+    elif n == 3:
+        return 'HIGH'
+    elif n == 4:
+        return 'CRITICAL'
+    else:
+        return 'UNKNOWN'
+
+
+def host_details(scan_id, host_id):
+    r = call_api("get", "scans/{}/hosts/{}".format(scan_id, host_id))
+    fqdn = ip = netbios = os = mac = ""
+    if 'host-fqdn' in r['info']:
+        fqdn = r['info']['host-fqdn']
+    if 'host-ip' in r['info']:
+        ip = r['info']['host-ip']
+    if 'netbios-name' in r['info']:
+        netbios = r['info']['netbios-name']
+    if 'operating-system' in r['info']:
+        os = r['info']['operating-system']
+    if 'mac' in r['info']:
+        mac = r['info']['mac-address']
+    os_data = [fqdn, ip, netbios, os, mac]
+    if updatedb:
+        insert_os(os_data)
+
+    if not quiet:
+        print("Host: {}".format(fqdn))
+        print("IP address: {}".format(ip))
+        print("Netbios: {}".format(netbios))
+        print("Operating system: {}".format(os))
+        print("MAC address: {}".format(mac))
+
+    for d in r['vulnerabilities']:
+        severity = d['severity']
+        name = d['plugin_name']
+        plugin = d['plugin_id']
+        if not quiet:
+            print("{:8} {:>5} {}".format(severity_name(severity), plugin, name))
+
+        vuln_data = [scan_id, host_id, severity, name, plugin]
+        if updatedb:
+            insert_vuln(vuln_data)
+
+
+def insert_host(id, hostname, scan_id):
+    try:
+        conn = sqlite3.connect(dbfile)
+        c = conn.cursor()
+        sql = "insert into hosts \
+            (host_id, hostname, scan_id) \
+            values (?, ?, ?)"
+        c.execute(sql, [id, hostname, scan_id])
+        conn.commit()
+        conn.close()
+        return True
+    except:
+        raise
+        return False
+
+def insert_vuln(data):
+    try:
+        conn = sqlite3.connect(dbfile)
+        c = conn.cursor()
+        sql = "insert into vulnerabilities \
+            (scan_id, host_id, severity, name, plugin) \
+            values (?, ?, ?, ?, ?)"
+        c.execute(sql, data)
+        conn.commit()
+        conn.close()
+        return True
+    except:
+        raise
+        return False
+
+
+def insert_os(data):
+    try:
+        conn = sqlite3.connect(dbfile)
+        c = conn.cursor()
+        sql = "insert into os \
+            (fqdn, ip, netbios, os, mac) \
+            values (?, ?, ?, ?, ?)"
+        c.execute(sql, data)
+        conn.commit()
+        conn.close()
+        return True
+    except:
+        raise
+        return False
 
 
 if __name__ == "__main__":
+    # Keep warnings out of console
+    logging.captureWarnings(True)
+
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config',
         dest="config_file",
         required = False,
         help="Configuration file")
+    parser.add_argument('-q', '--quiet',
+        dest="quiet",
+        required = False,
+        action="store_true",
+        help="Do not output to console")
+    parser.add_argument('-u', '--updatedb',
+        dest="updatedb",
+        required = False,
+        action="store_true",
+        help="Updates database")
 
     # Commands
     subparsers = parser.add_subparsers(dest="command")
-    u_parser = subparsers.add_parser("update")
-    d_parser = subparsers.add_parser("download")
+    u_parser = subparsers.add_parser("us")
+    las_parser = subparsers.add_parser("las")
+    laf_parser = subparsers.add_parser("laf")
+    lf_parser = subparsers.add_parser("lf")
+    ls_parser = subparsers.add_parser("ls")
+    hd_parser = subparsers.add_parser("hd")
 
     # update scan
     u_parser.add_argument("-s", "--scan",
@@ -100,6 +275,28 @@ if __name__ == "__main__":
         required = True,
         help = "Filename containing list of targets")
 
+    # list folder
+    lf_parser.add_argument("-f", "--folder",
+        dest = "folder_id",
+        required = True,
+        help = "Folder ID")
+
+    # list scan
+    ls_parser.add_argument("-s", "--scan",
+        dest = "scan_id",
+        required = True,
+        help = "Scan ID")
+
+    # host details
+    hd_parser.add_argument("-s", "--scan",
+        dest = "scan_id",
+        required = True,
+        help = "Scan ID")
+    hd_parser.add_argument("-H", "--host",
+        dest = "host_id",
+        required = True,
+        help = "Host ID")
+
     args = parser.parse_args()
     command = args.command
 
@@ -108,16 +305,33 @@ if __name__ == "__main__":
         c = configure(args.config_file)
     else:
         c = configure()
+
     host   = c['host']['hostname']
     port   = c['host']['port']
     access = c['host']['access']
     secret = c['host']['secret']
     verify = c['host']['verify']
+    dbfile = c['db']['path']
 
-    # Disable SSL warnings: not recommended
-    if c['host']['disable_warnings']:
-        requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+    # console output
+    quiet = args.quiet
+    updatedb = args.updatedb
 
     # Command: update
-    if command == "update":
+    if command == "us":
         update_scan(args.scan, args.filename)
+
+    if command == "laf":
+        list_all_folders()
+
+    if command == "las":
+        list_all_scans()
+
+    if command == "lf":
+        list_folder(args.folder_id)
+
+    if command == "ls":
+        list_scan(args.scan_id)
+
+    if command == "hd":
+        host_details(args.scan_id, args.host_id)

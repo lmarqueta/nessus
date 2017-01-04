@@ -1,0 +1,11 @@
+# Nessus host configuration
+host:
+  hostname: hostname.domain
+  port: 8834
+  access: <access_key>
+  secret: <secret_key>
+  verify: path_to_ca
+
+db:
+  path: path_to_sqlite3_db
+
