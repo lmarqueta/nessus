@@ -1,7 +1,5 @@
 # nessus
-Nessus helper scripts
-
-At this moment there are a few options:
+Nessus helper scripts. Uses Nessus RESTful API to automate some repetitive tasks.
 
 ```
 usage: nessus_api.py [-h] [-c CONFIG_FILE] [-q] [-u] {us,las,laf,lf,ls,hd} ...
@@ -33,9 +31,11 @@ Updates a existing scan with a list of target hosts. Hosts are stored in a text 
 host-1.domain
 host-2.domain
 host-3.another.domain
+
 ```
 
 This is very useful if you want to keep the scans in sync with your CMDB.
+
 
 ## List all folders
 
