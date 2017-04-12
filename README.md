@@ -2,7 +2,7 @@
 Nessus helper scripts. Uses Nessus RESTful API to automate some repetitive tasks.
 
 ```
-usage: nessus_api.py [-h] [-c CONFIG_FILE] [-q] [-u] {us,las,laf,lf,ls,hd} ...
+usage: nessus_api.py [-h] [-c CONFIG_FILE] [-q] [-u] {us,las,laf,lf,ls,lsh,dsh,hd} ...
 ```
 
 There are a couple of options before the *command*:
@@ -139,6 +139,30 @@ The columns left indicate:
 * L: low
 
 Now go and patch `forgotten.server.domain` please!
+
+
+## List scan history
+
+Shows history_id and date for a particular scan:
+
+```
+python nessus_api.py lsh -s 894
+hid   date
+===== =======
+ 1968 2017-03-28
+ 2041 2017-04-04
+ 2136 2017-04-11
+```
+
+
+## Delete scan history
+
+Deletes historical results from a scan
+
+```
+python ./nessus_api.py dsh -s 894 -y 1968
+```
+
 
 ## Host details
 
