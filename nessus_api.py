@@ -9,6 +9,7 @@ import yaml
 import json
 import logging
 import sqlite3
+import datetime
 
 
 def configure(file="nessus.yaml"):
@@ -37,12 +38,18 @@ def call_api(method, path, data=None):
         r = requests.get(url, headers=headers, verify=verify)
     elif method == "put":
         r = requests.put(url, headers=headers, data=json.dumps(data), verify=verify)
+    elif method == "delete":
+        r = requests.delete(url, headers=headers, data=json.dumps(data), verify=verify)
     else:
+        # print(method, path, data)
         sys.stderr.write("Error: unknown method")
         sys.exit(1)
 
     if r.status_code == 200:
-        return r.json()
+        try:
+            return r.json()
+        except:
+            return
     else:
         sys.stderr.write("Error {}\n".format(r.status_code))
         sys.exit(1)
@@ -135,6 +142,18 @@ def list_scan(scan_id):
 
         if updatedb:
             insert_host(hid, name, scan_id)
+
+
+def list_scan_history(scan_id):
+    r = call_api("get", "scans/{}".format(scan_id))
+    print("hid   date\n===== =======")
+    for d in r['history']:
+        mdate = datetime.datetime.fromtimestamp(d['last_modification_date']).strftime('%Y-%m-%d')
+        print("{:>5} {}").format(d['history_id'], mdate)
+
+
+def delete_scan_history(scan_id, history_id):
+    r = call_api("delete", "scans/{}/history/{}".format(scan_id, history_id))
 
 
 def severity_name(n):
@@ -263,6 +282,8 @@ if __name__ == "__main__":
     laf_parser = subparsers.add_parser("laf")
     lf_parser = subparsers.add_parser("lf")
     ls_parser = subparsers.add_parser("ls")
+    lsh_parser = subparsers.add_parser("lsh")
+    dsh_parser = subparsers.add_parser("dsh")
     hd_parser = subparsers.add_parser("hd")
 
     # update scan
@@ -286,6 +307,22 @@ if __name__ == "__main__":
         dest = "scan_id",
         required = True,
         help = "Scan ID")
+
+    # list scan history
+    lsh_parser.add_argument("-s", "--scan",
+        dest = "scan_id",
+        required = True,
+        help = "Scan ID")
+
+    # delete scan history
+    dsh_parser.add_argument("-s", "--scan",
+        dest = "scan_id",
+        required = True,
+        help = "Scan ID")
+    dsh_parser.add_argument("-y", "--history_id",
+        dest = "history_id",
+        required = True,
+        help = "History ID")
 
     # host details
     hd_parser.add_argument("-s", "--scan",
@@ -332,6 +369,12 @@ if __name__ == "__main__":
 
     if command == "ls":
         list_scan(args.scan_id)
+
+    if command == "lsh":
+        list_scan_history(args.scan_id)
+
+    if command == "dsh":
+        delete_scan_history(args.scan_id, args.history_id)
 
     if command == "hd":
         host_details(args.scan_id, args.host_id)
